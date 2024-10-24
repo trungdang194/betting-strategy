@@ -16,22 +16,16 @@ namespace BettingStrategySimulator.BigOrSmall
             int dice1 = rng.Next(1, 7);
             int dice2 = rng.Next(1, 7);
             int dice3 = rng.Next(1, 7);
-
-            return new ThreeDicesResult { Dice1 = dice1, Dice2 = dice2, Dice3 = dice3, Point = dice1 + dice2 + dice3, IsTriple = dice1 == dice2 && dice1 == dice3 };
+            int point = dice1 + dice2 + dice3;
+            ThreeDicesDirection direction =
+                dice1 == dice2 && dice1 == dice3 ? ThreeDicesDirection.Tripple
+                : point >= 11 && point <= 17 ? ThreeDicesDirection.Big
+                : point >= 4 && point <= 10 ? ThreeDicesDirection.Small
+                : ThreeDicesDirection.None;
+            return new ThreeDicesResult { Dice1 = dice1, Dice2 = dice2, Dice3 = dice3, Point = point, Direction = direction };
         }
 
-        public static void RunSimulator()
-        {
-            for (int i = 0; i < 1000; i++)
-            {
-                ThreeDicesResult result = Roll();
-
-                // Save to DB
-
-            }
-        }
-
-        public static void RunSession(Martingale strategy)
+        public static void RunSession(Martingale strategy, BettingStrategyContext dbContext)
         {
             while (true)
             {
@@ -40,23 +34,45 @@ namespace BettingStrategySimulator.BigOrSmall
                 {
                     // win
                     // save to db
-
-                    break;
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await dbContext.BetResults.AddAsync(new Models.BetResult { CurrentBalance = 1, PnL = 1, PreviousBalance = 1, GameReult = GameReult.Win, GameSessionId = "", StrategyStatisticsId = "" });
+                        }
+                        catch (Exception ex)
+                        {
+                        }
+                    });
+                    return;
                 }
 
-                // lose
+                // lose, continue next bet
                 // save to db
                 strategy.NextBetWhenWin = strategy.InitialBet;
                 strategy.NextBetWhenLose = strategy.CurrentBet * 2;
                 strategy.CurrentBet = strategy.NextBetWhenLose;
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await dbContext.BetResults.AddAsync(new Models.BetResult { CurrentBalance = 1, PnL = 1, PreviousBalance = 1, GameReult = GameReult.Win, GameSessionId = "", StrategyStatisticsId = "" });
+                    }
+                    catch (Exception ex)
+                    {
+                    }
+                });
             }
         }
 
-        public static void RunLongTermGame(Martingale strategy)
+        public static void RunStatistics(Martingale strategy)
         {
-            for (int i = 0;i < 1000;i++)
+            using (BettingStrategyContext dbContext = new BettingStrategyContext())
             {
-                RunSession(strategy);
+                for (int i = 0; i < 1000; i++)
+                {
+                    RunSession(strategy, dbContext);
+                }
             }
         }
     }
